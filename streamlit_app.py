@@ -234,11 +234,6 @@ def render_mode_banner() -> None:
 def render_sidebar() -> str:
     """Render sidebar and return the selected scenario key."""
     with st.sidebar:
-        st.image(
-            "https://raw.githubusercontent.com/streamlit/streamlit/develop/"
-            "lib/streamlit/static/favicon.png",
-            width=40,
-        ) if False else None  # Placeholder — we don't load external images
         st.title("🤖 Cindy Demo")
         st.markdown("*Agentic AI for Year 6*")
         st.divider()

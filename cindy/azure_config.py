@@ -27,9 +27,12 @@ AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
 
 def is_configured() -> bool:
     """Return True when real Azure credentials are present."""
-    return bool(AZURE_ENDPOINT and AZURE_API_KEY
-                and "your-resource" not in AZURE_ENDPOINT
-                and "your-api-key" not in AZURE_API_KEY)
+    return bool(
+        AZURE_ENDPOINT
+        and AZURE_API_KEY
+        and "your-resource" not in AZURE_ENDPOINT
+        and "your-api-key" not in AZURE_API_KEY
+    )
 
 
 # ---------------------------------------------------------------------------
