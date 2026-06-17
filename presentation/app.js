@@ -1,4 +1,5 @@
 // Change this URL if your Cindy app is hosted elsewhere (LAN IP or cloud URL).
+// Use https:// for any internet-hosted deployment.
 const CINDY_APP_URL = "http://localhost:8501";
 
 (function initDeck() {
