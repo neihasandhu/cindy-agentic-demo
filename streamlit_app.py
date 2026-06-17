@@ -377,7 +377,7 @@ function showFallback(msg) {
     noteEl.innerHTML = '&#128172; <strong>Text fallback mode active</strong>'
         + ' &mdash; lesson content still works!';
     fallNoteEl.appendChild(noteEl);
-    setStatus('\\U0001F7E1 Running in text fallback mode', '');
+    setStatus('🟡 Running in text fallback mode', '');
     enableSpeakButtons(false);
 }
 
