@@ -178,6 +178,38 @@ Bring it back to the title question:
 | Screen too small for students to read | Zoom browser to 125% and use the wide Streamlit layout |
 | Internet access issues | The app works fully offline in DEMO mode (no internet needed) |
 | Student enters inappropriate goal | The system prompt instructs Cindy to stay age-appropriate; Azure OpenAI also has content filters |
+| 🗣️ Avatar shows 🟡 "not configured" | Normal without Speech credentials — emoji + text fallback works fine |
+| 🗣️ Avatar video box stays black | WebRTC may be blocked by venue firewall — use text fallback; test on venue wifi first |
+| 🗣️ "Azure Speech SDK failed to load" | Network blocking CDN; use text fallback or mobile hotspot |
+
+---
+
+## 🗣️ Using the Talking Cindy Avatar
+
+> *Optional — requires Azure AI Speech credentials configured in `.env`
+> (see `setup_azure_speech.md`). The rest of the demo works without it.*
+
+### Before the presentation
+1. Open the **🗣️ Talking Cindy** page and check the banner shows
+   🟢 **Photoreal Avatar LIVE**.
+2. Click **Connect Cindy** — wait for Lisa to appear in the video panel.
+3. Click **🍽️ Bad Restaurant Advice** to do a test run — Cindy should speak in
+   an Australian accent with lip-sync.
+4. If any step fails the page automatically falls back to emoji + text — the
+   lesson content is unaffected.
+
+### During the presentation
+- **Scenario 1 moment:** Click **🍽️ Bad Restaurant Advice** to have Cindy speak
+  her terrible advice aloud. Ask: *"Is that a problem?"*
+- **Scenario 2 moment:** Click **🤖 Autonomous Action!** to hear Cindy
+  announce she's already done everything.
+- **Scenario 3 interactive moment:** Use the goal input at the top of the page.
+  Have a student suggest a goal → click **Generate Cindy's Response** → click
+  **Speak AI Response** for the avatar to read it aloud.
+- **Free text:** Use the text box at the bottom of the avatar panel to type
+  anything you want Cindy to say — great for improvised moments.
+- **Key question after each avatar line:**
+  > *"Who's in charge — you, or the AI?"*
 
 ---
 
