@@ -22,6 +22,16 @@ from typing import Optional, Tuple
 
 from dotenv import load_dotenv
 
+# requests is used to mint short-lived Azure Speech tokens.
+# It is listed in requirements.txt; import here so missing-dependency errors
+# surface immediately at start-up rather than at first token request.
+try:
+    import requests as _requests
+    _REQUESTS_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _requests = None  # type: ignore[assignment]
+    _REQUESTS_AVAILABLE = False
+
 # Load .env file if present (silently ignored if it doesn't exist)
 load_dotenv()
 
@@ -65,8 +75,9 @@ def is_avatar_configured() -> bool:
 # Module-level token cache: (token_string, region, expiry_unix_timestamp)
 _token_cache: Optional[Tuple[str, str, float]] = None
 
-# Cache TTL in seconds (tokens last ~10 min; refresh 1 min early)
-_TOKEN_TTL = 540  # 9 minutes
+# Cache TTL in seconds.  Azure Speech tokens are valid for ~10 minutes; we
+# refresh 1 minute early (at 9 minutes) to avoid expiry mid-session.
+_TOKEN_TTL = 540  # 9 minutes = 10 min validity - 1 min safety margin
 
 
 def get_speech_token() -> Optional[Tuple[str, str]]:
@@ -91,6 +102,16 @@ def get_speech_token() -> Optional[Tuple[str, str]]:
     if not is_avatar_configured():
         return None
 
+    if not _REQUESTS_AVAILABLE:
+        import warnings
+        warnings.warn(
+            "cindy/speech_config.py: 'requests' is not installed. "
+            "Run: pip install -r requirements.txt",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return None
+
     url = (
         f"https://{AZURE_SPEECH_REGION}.api.cognitive.microsoft.com"
         "/sts/v1.0/issueToken"
@@ -98,14 +119,18 @@ def get_speech_token() -> Optional[Tuple[str, str]]:
     headers = {"Ocp-Apim-Subscription-Key": AZURE_SPEECH_KEY}
 
     try:
-        import requests  # imported here so the module loads without requests installed
-
-        response = requests.post(url, headers=headers, timeout=10)
+        response = _requests.post(url, headers=headers, timeout=10)
         response.raise_for_status()
         return (response.text.strip(), AZURE_SPEECH_REGION)
-    except Exception:  # pylint: disable=broad-except
-        # Network errors, HTTP errors, or missing requests package all
-        # result in a graceful None so the app falls back to text mode.
+    except Exception as exc:  # pylint: disable=broad-except
+        # Log the failure so developers can diagnose config issues, then
+        # return None so the app falls back to text mode gracefully.
+        import warnings
+        warnings.warn(
+            f"cindy/speech_config.py: Failed to obtain Azure Speech token: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return None
 
 

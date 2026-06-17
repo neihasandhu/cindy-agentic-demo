@@ -129,21 +129,26 @@ st.markdown(
 # Helper: strip markdown / emoji from text before sending to TTS
 # ---------------------------------------------------------------------------
 
-_EMOJI_RE = re.compile(
-    "["
-    "\U0001F600-\U0001F64F"  # emoticons
-    "\U0001F300-\U0001F5FF"  # misc symbols & pictographs
-    "\U0001F680-\U0001F6FF"  # transport & map symbols
-    "\U0001F1E0-\U0001F1FF"  # flags
-    "\U00002702-\U000027B0"  # dingbats
-    "\U0001F900-\U0001F9FF"  # supplemental symbols
-    "\U00002600-\U000026FF"  # misc symbols
-    "\U00002700-\U000027BF"  # dingbats (alt range)
-    "\U0001FA00-\U0001FA6F"  # chess etc.
-    "\U0001FA70-\U0001FAFF"  # symbols extended-A
-    "]+",
-    flags=re.UNICODE,
-)
+def _is_emoji(char: str) -> bool:
+    """
+    Return True if *char* is a pictographic symbol or emoji.
+
+    Uses non-overlapping Unicode code-point ranges to avoid false positives.
+    Covers all major emoji blocks without regex character-class range issues.
+    """
+    cp = ord(char)
+    return (
+        # Miscellaneous symbols and Dingbats (combined, non-overlapping)
+        0x2600 <= cp <= 0x27BF
+        # Enclosed alphanumerics supplement, Misc symbols & Arrows, etc.
+        or 0x2B00 <= cp <= 0x2BFF
+        # Regional indicator symbols (flags)
+        or 0x1F1E0 <= cp <= 0x1F1FF
+        # All emoji blocks in the supplementary plane (U+1F300 – U+1FAFF)
+        # Covers: misc symbols & pictographs, emoticons, transport, maps,
+        #         supplemental symbols, chess pieces, symbols extended-A
+        or 0x1F300 <= cp <= 0x1FAFF
+    )
 
 
 def clean_text_for_tts(text: str) -> str:
@@ -160,8 +165,8 @@ def clean_text_for_tts(text: str) -> str:
     text = re.sub(r"\*{1,3}([^*\n]+)\*{1,3}", r"\1", text)
     text = re.sub(r"_{1,3}([^_\n]+)_{1,3}", r"\1", text)
     text = re.sub(r"~~([^~]+)~~", r"\1", text)
-    # Inline code
-    text = re.sub(r"`[^`]+`", "", text)
+    # Inline code (including empty spans)
+    text = re.sub(r"`[^`]*`", "", text)
     # Markdown links [label](url)
     text = re.sub(r"\[([^\]]+)\]\([^\)]*\)", r"\1", text)
     # Bullet / list markers at line start
@@ -169,8 +174,9 @@ def clean_text_for_tts(text: str) -> str:
     text = re.sub(r"^\d+\.\s+", "", text, flags=re.MULTILINE)
     # Arrow / special characters
     text = text.replace("→", ", ").replace("►", "").replace("•", "")
-    # Emoji
-    text = _EMOJI_RE.sub("", text)
+    # Emoji — removed character-by-character using code-point ranges
+    # (avoids overlapping Unicode ranges that trigger linter warnings)
+    text = "".join("" if _is_emoji(c) else c for c in text)
     # Multiple newlines → sentence boundary
     text = re.sub(r"\n{2,}", ". ", text)
     text = re.sub(r"\n", " ", text)
@@ -498,7 +504,11 @@ document.getElementById('customInput').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') speakCustomText();
 });
 
-// On page load: wait briefly for SDK script to execute, then enable Connect
+// On page load: the SDK <script> tag is parsed and executed after DOMContentLoaded
+// but the SpeechSDK global may not be available until the external script fully
+// loads.  We wait 2.5 seconds to give the CDN script time to execute before
+// checking whether SpeechSDK is defined; this avoids a false "failed to load"
+// message on slower connections.
 window.addEventListener('load', function() {
     setTimeout(function() {
         if (typeof SpeechSDK !== 'undefined') {
