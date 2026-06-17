@@ -96,6 +96,16 @@ The app displays a banner indicating whether it is running in:
 
 ---
 
+## 🎬 Presentation Deck (Reveal.js)
+
+A matching, kid-friendly web slide deck for live delivery is available in:
+
+👉 **[presentation/](presentation/)** (open `presentation/index.html`)
+
+See **[presentation/README.md](presentation/README.md)** for presenter controls, speaker notes, and Cindy launch-button setup.
+
+---
+
 ## 📁 Project Structure
 
 ```

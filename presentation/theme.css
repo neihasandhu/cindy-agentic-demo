@@ -1,0 +1,141 @@
+:root {
+  --cindy-bg: #f0f4ff;
+  --cindy-yellow: #f7c948;
+  --cindy-cream: #fff9db;
+  --cindy-blue: #3498db;
+  --cindy-green: #27ae60;
+  --cindy-red: #e74c3c;
+  --cindy-slate: #2c3e50;
+  --cindy-slate-2: #34495e;
+}
+
+.reveal {
+  background: var(--cindy-bg);
+  color: var(--cindy-slate);
+  font-size: 40px;
+}
+
+.reveal h1,
+.reveal h2,
+.reveal h3 {
+  color: var(--cindy-slate);
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+.reveal h1 {
+  font-size: 1.8em;
+}
+
+.reveal h2 {
+  font-size: 1.4em;
+}
+
+.reveal p,
+.reveal li,
+.reveal td,
+.reveal th {
+  font-size: 0.82em;
+  line-height: 1.35;
+}
+
+.subtitle,
+.big-line,
+.final-call {
+  font-size: 1em;
+  font-weight: 700;
+  color: var(--cindy-slate-2);
+}
+
+.small-gap {
+  margin-top: 0.8em;
+}
+
+.card-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7em;
+  margin-top: 0.7em;
+}
+
+.card {
+  background: #ffffff;
+  border: 4px solid var(--cindy-blue);
+  border-radius: 18px;
+  padding: 0.55em;
+}
+
+.card.highlight {
+  background: var(--cindy-cream);
+  border-color: var(--cindy-yellow);
+}
+
+.launch-btn {
+  display: inline-block;
+  background: var(--cindy-green);
+  color: #fff !important;
+  text-decoration: none;
+  font-size: 0.9em;
+  font-weight: 800;
+  padding: 0.55em 0.85em;
+  border-radius: 999px;
+  border: 4px solid #1f8f4d;
+  box-shadow: 0 6px 0 #1f8f4d;
+}
+
+.launch-btn:hover,
+.launch-btn:focus {
+  transform: translateY(-1px);
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.compare-table thead th {
+  background: var(--cindy-blue);
+  color: #fff;
+}
+
+.compare-table th,
+.compare-table td {
+  border: 2px solid #d6e2ff;
+  padding: 0.35em;
+}
+
+.compare-table tbody tr:nth-child(even) {
+  background: #f8fbff;
+}
+
+.question-slide {
+  background: linear-gradient(135deg, #e9f3ff, #fff9db);
+  border: 8px solid var(--cindy-yellow);
+  border-radius: 24px;
+}
+
+.question-slide h1 {
+  color: var(--cindy-red);
+  font-size: 2.1em;
+}
+
+.superpowers li {
+  margin: 0.35em 0;
+}
+
+.reveal strong {
+  color: var(--cindy-slate);
+}
+
+@media (max-width: 900px) {
+  .reveal {
+    font-size: 30px;
+  }
+
+  .card-row {
+    grid-template-columns: 1fr;
+  }
+}
