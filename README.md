@@ -42,6 +42,9 @@ Same bad training data. But now Cindy has the power to **act** autonomously. Wit
 ### 🎮 Scenario 3 — Interactive Student Mode
 Students type a goal (e.g. *"I want to do better at maths"*) and Cindy autonomously decides how to achieve it — with chaotic, unintended consequences. Powered by Azure OpenAI (or pre-written mock responses if no credentials are configured).
 
+### 🗣️ Talking Cindy — Photoreal Avatar *(new!)*
+Cindy appears as a **realistic, talking photoreal avatar** powered by **Azure AI Speech — Text-to-Speech Avatar**. She speaks all scenario lines aloud with lip-sync, driven by on-page buttons and a free-text box. If the avatar is not configured or the connection fails, the page falls back gracefully to the emoji face + on-screen text so the lesson is never blocked.
+
 ---
 
 ## 🚀 Quick Start
@@ -84,6 +87,21 @@ The app displays a banner indicating whether it is running in:
 
 ---
 
+## 🗣️ Talking Cindy Avatar Setup (Optional)
+
+For the photoreal talking avatar, you need a separate **Azure AI Speech** resource:
+
+👉 See **[setup_azure_speech.md](setup_azure_speech.md)** for the step-by-step guide.
+
+The avatar page shows:
+- 🟢 **Photoreal Avatar LIVE** — connected and speaking with lip-sync
+- 🟡 **Avatar not configured** — text fallback mode (emoji face + on-screen text)
+
+> **Venue tip:** Test the avatar on the venue wifi before your presentation.
+> The avatar requires a good internet connection; the rest of the app works offline.
+
+---
+
 ## 👩‍🏫 Teacher's Guide
 
 👉 See **[DEMO_GUIDE.md](DEMO_GUIDE.md)** for:
@@ -104,11 +122,13 @@ cindy-agentic-demo/
 ├── requirements.txt       # Python dependencies
 ├── .env.example           # Azure credentials template
 ├── setup_azure.md         # Azure OpenAI setup guide
+├── setup_azure_speech.md  # Azure AI Speech (avatar) setup guide
 ├── DEMO_GUIDE.md          # Teacher's guide
 ├── cindy/
 │   ├── __init__.py        # Package init
 │   ├── personality.py     # Cindy's character, moods, catchphrases, system prompt
 │   ├── azure_config.py    # Azure OpenAI client + mock fallback
+│   ├── speech_config.py   # Azure AI Speech token helper + avatar config
 │   ├── actions.py         # Simulated autonomous actions (nothing real!)
 │   └── scenarios.py       # Scenario data and helper functions
 └── assets/

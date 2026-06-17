@@ -181,6 +181,70 @@ Bring it back to the title question:
 
 ---
 
+## 🗣️ Talking Cindy — Photoreal Avatar
+
+> **New page!** Click **🗣️ Talking Cindy — Photoreal Avatar** in the sidebar.
+
+### What it does
+Cindy appears as a realistic, talking photoreal avatar powered by Azure AI Speech.
+She speaks scenario lines aloud with lip-sync — great for the "wow" moment when
+she announces she has taken autonomous action.
+
+### Setup
+Follow **`setup_azure_speech.md`** to create an Azure AI Speech resource and add
+your key and region to `.env`.  **Test the avatar on the venue wifi before the day.**
+
+### Presenter tips for the Talking Cindy page
+
+1. **Open the page before the class arrives** — the WebRTC connection takes a few
+   seconds to establish.  Click **Connect Cindy** and wait for the green
+   *"Cindy is connected and ready!"* status.
+
+2. **Click 🍽️ Bad Restaurant Advice** — Cindy speaks Scenario 1's terrible
+   advice aloud.  Pause and ask the class: *"Is this a big problem?"*
+   *(No — you can just ignore it.)*
+
+3. **Click 🤖 Autonomous Action!** — Cindy announces she has already handled
+   everything.  Pause and ask: *"Did anyone ask her to do that?"*  Then:
+   ***"Who's in charge?"***
+
+4. **Generate a Scenario 3 AI response** (scroll down on the page):
+   - Ask a volunteer to type a goal (e.g. *"I want to be more popular at school"*).
+   - Click **Generate Cindy's Response** and wait for the AI text to appear.
+   - Click **🧠 Speak AI Response** inside the avatar panel.
+   - After Cindy finishes speaking, ask: *"Which of those actions did you agree to?"*
+   ***"Who's in charge?"***
+
+5. **Free text box** — type anything and click **🗣️ Make Cindy Say This** for
+   a live, improvised moment.  Works well for the closing reflection:
+   *"Robots are fast. Humans are wise."*
+
+### If the avatar connection fails
+
+The page **automatically falls back** to the emoji face + on-screen text.
+A yellow notice explains what happened. Every lesson point still lands perfectly —
+the avatar is an impressive extra, not a requirement.
+
+| Situation | What happens |
+|---|---|
+| No Azure Speech credentials | 🟡 Text fallback mode from the start |
+| WebRTC blocked by school firewall | Falls back automatically with a message |
+| Token expires mid-demo (~10 min) | Click **Reconnect** — token refreshes instantly |
+| Slow wifi | Connection may take longer; text is always available |
+
+### Timing suggestion
+
+Add **5–8 minutes** to your session for the Talking Cindy page:
+
+| Action | Time |
+|---|---|
+| Connect avatar + show Scenario 1 | 2 min |
+| Scenario 2 autonomous action (avatar speaks) | 2 min |
+| Scenario 3 — one student goal + avatar speaks plan | 3 min |
+| Class discussion: "Who's in charge?" | 3 min |
+
+---
+
 ## 🔗 Curriculum Links
 
 - **Computing:** Understanding AI, algorithmic thinking, data and its uses
