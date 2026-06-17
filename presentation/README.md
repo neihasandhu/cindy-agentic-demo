@@ -40,6 +40,8 @@ If your app is hosted somewhere else, edit that line to your URL, for example:
 - `http://192.168.1.50:8501` (same local network)
 - `https://your-app-name.streamlit.app` (cloud host)
 
+For internet-hosted deployments, prefer an `https://` URL.
+
 ## Offline + live demo reminder
 
 - The **deck itself** is fully offline and safe to present without internet.
