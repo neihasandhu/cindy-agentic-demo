@@ -364,10 +364,20 @@ function showFallback(msg) {
     document.getElementById('avatarWrap').style.display = 'none';
     fallFaceEl.style.display = 'block';
     fallNoteEl.style.display = 'block';
-    fallNoteEl.innerHTML     = '&#9888;&#65039; ' + msg
-        + '<br><br>&#128172; <strong>Text fallback mode active</strong>'
+    // Build the notice using DOM methods so that the error message (msg) is
+    // set via textContent — this prevents any HTML injection from SDK error
+    // strings being interpreted as markup.
+    fallNoteEl.textContent = '';
+    var warnEl = document.createElement('span');
+    warnEl.textContent = '\u26A0\uFE0F ' + msg;
+    fallNoteEl.appendChild(warnEl);
+    fallNoteEl.appendChild(document.createElement('br'));
+    fallNoteEl.appendChild(document.createElement('br'));
+    var noteEl = document.createElement('span');
+    noteEl.innerHTML = '&#128172; <strong>Text fallback mode active</strong>'
         + ' &mdash; lesson content still works!';
-    setStatus('&#128993; Running in text fallback mode', '');
+    fallNoteEl.appendChild(noteEl);
+    setStatus('\U0001F7E1 Running in text fallback mode', '');
     enableSpeakButtons(false);
 }
 
@@ -813,7 +823,7 @@ def render_talking_cindy() -> None:
     st.markdown(
         "### 💬 Presenter Tips\n"
         "- After Cindy speaks a scenario line, ask the class: "
-        "**\u201cWho\u2019s in charge \u2014 you, or the AI?\u201d**\n"
+        '**\u201cWho\u2019s in charge \u2014 you, or the AI?\u201d**\n'
         "- Use **Scenario 3** to let a student type a goal live \u2014 "
         "the AI-generated plan highlights autonomous decision-making.\n"
         "- If the avatar connection fails mid-demo, the on-screen text "

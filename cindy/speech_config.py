@@ -122,12 +122,44 @@ def get_speech_token() -> Optional[Tuple[str, str]]:
         response = _requests.post(url, headers=headers, timeout=10)
         response.raise_for_status()
         return (response.text.strip(), AZURE_SPEECH_REGION)
-    except Exception as exc:  # pylint: disable=broad-except
-        # Log the failure so developers can diagnose config issues, then
-        # return None so the app falls back to text mode gracefully.
+    except _requests.exceptions.Timeout:
         import warnings
         warnings.warn(
-            f"cindy/speech_config.py: Failed to obtain Azure Speech token: {exc}",
+            "cindy/speech_config.py: Azure Speech token request timed out "
+            "(network connection issue). The app will run in text fallback mode.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return None
+    except _requests.exceptions.HTTPError as exc:
+        import warnings
+        status = exc.response.status_code if exc.response is not None else "unknown"
+        if status == 401:
+            hint = "Invalid AZURE_SPEECH_KEY — check your .env file."
+        elif status == 403:
+            hint = "Access denied — key may lack Speech service permissions."
+        else:
+            hint = f"HTTP {status}."
+        warnings.warn(
+            f"cindy/speech_config.py: Azure Speech token request failed: {hint}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return None
+    except _requests.exceptions.RequestException as exc:
+        import warnings
+        warnings.warn(
+            f"cindy/speech_config.py: Azure Speech token request failed: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return None
+    except Exception as exc:  # pylint: disable=broad-except
+        # Catch unexpected errors (e.g. invalid JSON from server) so the app
+        # always falls back gracefully rather than raising.
+        import warnings
+        warnings.warn(
+            f"cindy/speech_config.py: Unexpected error obtaining Speech token: {exc}",
             RuntimeWarning,
             stacklevel=2,
         )
