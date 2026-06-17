@@ -408,11 +408,14 @@
 							handleStateMessage( data );
 						}
 						else if( data.type === 'return' ) {
-							var pendingCall = pendingCalls[data.callId];
-							if( typeof pendingCall === 'function' ) {
-								pendingCall( data.result );
+							var callId = parseInt( data.callId, 10 );
+							if( Number.isInteger( callId ) && callId > 0 ) {
+								var pendingCall = pendingCalls[callId];
+								if( pendingCall && typeof pendingCall.run === 'function' ) {
+									pendingCall.run( data.result );
+								}
+								delete pendingCalls[callId];
 							}
-							delete pendingCalls[data.callId];
 						}
 					}
 					// Messages sent by the reveal.js inside of the current slide preview
@@ -444,7 +447,7 @@
 				function callRevealApi( methodName, methodArguments, callback ) {
 
 					var callId = ++lastRevealApiCallId;
-					pendingCalls[callId] = callback;
+					pendingCalls[callId] = { run: callback };
 					window.opener.postMessage( JSON.stringify( {
 						namespace: 'reveal-notes',
 						type: 'call',
