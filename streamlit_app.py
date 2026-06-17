@@ -10,11 +10,13 @@ Run with:
 Works without Azure credentials (DEMO/MOCK mode).
 """
 
+import json
 import os
+import re
 import streamlit as st
 
 # Cindy package imports
-from cindy import azure_config
+from cindy import azure_config, speech_config
 from cindy.personality import get_mood_emoji, random_catchphrase
 from cindy.scenarios import (
     SCENARIO_1,
@@ -124,6 +126,451 @@ st.markdown(
 )
 
 # ---------------------------------------------------------------------------
+# Helper: strip markdown / emoji from text before sending to TTS
+# ---------------------------------------------------------------------------
+
+def _is_emoji(char: str) -> bool:
+    """
+    Return True if *char* is a pictographic symbol or emoji.
+
+    Uses non-overlapping Unicode code-point ranges to avoid false positives.
+    Covers all major emoji blocks without regex character-class range issues.
+    """
+    cp = ord(char)
+    return (
+        # Miscellaneous symbols and Dingbats (combined, non-overlapping)
+        0x2600 <= cp <= 0x27BF
+        # Enclosed alphanumerics supplement, Misc symbols & Arrows, etc.
+        or 0x2B00 <= cp <= 0x2BFF
+        # Regional indicator symbols (flags)
+        or 0x1F1E0 <= cp <= 0x1F1FF
+        # All emoji blocks in the supplementary plane (U+1F300 – U+1FAFF)
+        # Covers: misc symbols & pictographs, emoticons, transport, maps,
+        #         supplemental symbols, chess pieces, symbols extended-A
+        or 0x1F300 <= cp <= 0x1FAFF
+    )
+
+
+def clean_text_for_tts(text: str) -> str:
+    """
+    Return a TTS-friendly version of *text*.
+
+    Strips Markdown formatting, emoji, bullet characters, and other elements
+    that would be read awkwardly aloud.  The original text is preserved for
+    on-screen display via ``cindy_says()``.
+    """
+    # Markdown headings
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Bold / italic / strikethrough
+    text = re.sub(r"\*{1,3}([^*\n]+)\*{1,3}", r"\1", text)
+    text = re.sub(r"_{1,3}([^_\n]+)_{1,3}", r"\1", text)
+    text = re.sub(r"~~([^~]+)~~", r"\1", text)
+    # Inline code (including empty spans)
+    text = re.sub(r"`[^`]*`", "", text)
+    # Markdown links [label](url)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]*\)", r"\1", text)
+    # Bullet / list markers at line start
+    text = re.sub(r"^[\-\*•·]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\d+\.\s+", "", text, flags=re.MULTILINE)
+    # Arrow / special characters
+    text = text.replace("→", ", ").replace("►", "").replace("•", "")
+    # Emoji — removed character-by-character using code-point ranges
+    # (avoids overlapping Unicode ranges that trigger linter warnings)
+    text = "".join("" if _is_emoji(c) else c for c in text)
+    # Multiple newlines → sentence boundary
+    text = re.sub(r"\n{2,}", ". ", text)
+    text = re.sub(r"\n", " ", text)
+    # Collapse extra whitespace
+    text = re.sub(r"\s{2,}", " ", text)
+    return text.strip()
+
+
+# ---------------------------------------------------------------------------
+# Azure TTS Avatar HTML component template
+# ---------------------------------------------------------------------------
+# Placeholders (replaced by build_avatar_html) are ALL-CAPS strings that
+# cannot appear naturally in HTML/JS source, so str.replace() is safe.
+# Python values are embedded using json.dumps() to ensure correct JS literals.
+# ---------------------------------------------------------------------------
+
+_AVATAR_HTML_TEMPLATE = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: Arial, sans-serif;
+    background: #f0f4ff;
+    padding: 10px;
+    color: #2c3e50;
+}
+#statusBar {
+    text-align: center;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 0.9rem;
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    color: #856404;
+}
+#statusBar.connected { background: #d4edda; border-color: #28a745; color: #155724; }
+#statusBar.error     { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+#avatarWrap {
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+}
+#avatarVideo {
+    width: 100%;
+    border-radius: 14px;
+    background: #1a1a2e;
+    display: block;
+    min-height: 270px;
+}
+#fallbackFace   { font-size: 90px; text-align: center; padding: 8px 0; display: none; }
+#fallbackNotice {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin: 8px 0;
+    font-size: 0.88rem;
+    display: none;
+}
+#controls {
+    max-width: 480px;
+    margin: 10px auto 0;
+}
+.btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 8px;
+    justify-content: center;
+}
+button {
+    padding: 9px 14px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.86rem;
+    transition: opacity 0.15s;
+}
+button:disabled         { opacity: 0.42; cursor: not-allowed; }
+button:not(:disabled):hover { opacity: 0.83; }
+.btn-connect  { background: #4a90d9; color: white; }
+.btn-scenario { background: #f7c948; color: #2c3e50; }
+.btn-speak    { background: #27ae60; color: white; }
+.btn-ai       { background: #9b59b6; color: white; }
+#customInput {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 2px solid #c0c0c0;
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+}
+#customInput:focus { border-color: #4a90d9; outline: none; }
+</style>
+</head>
+<body>
+
+<div id="statusBar">&#128260; Loading Azure Speech SDK&hellip;</div>
+
+<div id="avatarWrap">
+    <video id="avatarVideo" autoplay playsinline></video>
+</div>
+<div id="fallbackFace">&#129302;</div>
+<div id="fallbackNotice"></div>
+
+<div id="controls">
+    <div class="btn-row">
+        <button class="btn-connect" id="btnConnect" onclick="connectAvatar()" disabled>
+            &#128268; Connect Cindy
+        </button>
+    </div>
+    <div class="btn-row">
+        <button class="btn-scenario" id="btnS1" onclick="speakScenario1()" disabled>
+            &#127869;&#65039; Bad Restaurant Advice
+        </button>
+        <button class="btn-scenario" id="btnS2" onclick="speakScenario2()" disabled>
+            &#129302; Autonomous Action!
+        </button>
+        <button class="btn-ai" id="btnAI" onclick="speakAiResponse()"
+                style="display:none" disabled>
+            &#129504; Speak AI Response
+        </button>
+    </div>
+    <div>
+        <input type="text" id="customInput"
+               placeholder="Type something for Cindy to say&hellip;" />
+        <div class="btn-row">
+            <button class="btn-speak" id="btnSpeak"
+                    onclick="speakCustomText()" disabled>
+                &#128483; Make Cindy Say This
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+<script>
+// Configuration injected from Python (all values are valid JSON literals)
+var CFG = {
+    token:     __TOKEN__,
+    region:    __REGION__,
+    character: __CHARACTER__,
+    style:     __STYLE__,
+    voice:     __VOICE__,
+    s1Text:    __S1TEXT__,
+    s2Text:    __S2TEXT__,
+    aiText:    __AITEXT__
+};
+
+var synthesizer    = null;
+var peerConnection = null;
+var isConnected    = false;
+
+var statusEl    = document.getElementById('statusBar');
+var videoEl     = document.getElementById('avatarVideo');
+var fallFaceEl  = document.getElementById('fallbackFace');
+var fallNoteEl  = document.getElementById('fallbackNotice');
+var btnConnect  = document.getElementById('btnConnect');
+var btnS1       = document.getElementById('btnS1');
+var btnS2       = document.getElementById('btnS2');
+var btnAI       = document.getElementById('btnAI');
+var btnSpeak    = document.getElementById('btnSpeak');
+
+function setStatus(msg, cls) {
+    statusEl.textContent = msg;
+    statusEl.className   = cls || '';
+}
+
+function enableSpeakButtons(on) {
+    [btnS1, btnS2, btnSpeak].forEach(function(b){ b.disabled = !on; });
+    if (on && CFG.aiText) {
+        btnAI.style.display = 'inline-block';
+        btnAI.disabled      = false;
+    }
+}
+
+function showFallback(msg) {
+    document.getElementById('avatarWrap').style.display = 'none';
+    fallFaceEl.style.display = 'block';
+    fallNoteEl.style.display = 'block';
+    // Build the notice using DOM methods so that the error message (msg) is
+    // set via textContent — this prevents any HTML injection from SDK error
+    // strings being interpreted as markup.
+    fallNoteEl.textContent = '';
+    var warnEl = document.createElement('span');
+    warnEl.textContent = '\u26A0\uFE0F ' + msg;
+    fallNoteEl.appendChild(warnEl);
+    fallNoteEl.appendChild(document.createElement('br'));
+    fallNoteEl.appendChild(document.createElement('br'));
+    var noteEl = document.createElement('span');
+    noteEl.innerHTML = '&#128172; <strong>Text fallback mode active</strong>'
+        + ' &mdash; lesson content still works!';
+    fallNoteEl.appendChild(noteEl);
+    setStatus('\U0001F7E1 Running in text fallback mode', '');
+    enableSpeakButtons(false);
+}
+
+function xmlEscape(t) {
+    return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+}
+
+function speakText(text) {
+    if (!synthesizer || !isConnected) {
+        setStatus('&#9888;&#65039; Not connected yet &mdash; click "Connect Cindy" first.');
+        return;
+    }
+    if (!text || !text.trim()) return;
+
+    setStatus('&#128483;&#65039; Cindy is speaking&hellip;');
+    [btnS1, btnS2, btnSpeak, btnAI].forEach(function(b){ b.disabled = true; });
+
+    var ssml = '<speak version="1.0"'
+        + ' xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-GB">'
+        + '<voice name="' + CFG.voice + '">' + xmlEscape(text) + '</voice>'
+        + '</speak>';
+
+    synthesizer.speakSsmlAsync(
+        ssml,
+        function(result) {
+            if (result.reason === SpeechSDK.ResultReason.SynthesizingAudioCompleted) {
+                setStatus('&#9989; Connected &mdash; ready to speak', 'connected');
+            } else {
+                setStatus('&#9888;&#65039; Speech issue: '
+                    + (result.errorDetails || String(result.reason)), '');
+            }
+            enableSpeakButtons(true);
+        },
+        function(err) {
+            setStatus('&#9888;&#65039; Speech error: ' + err, '');
+            enableSpeakButtons(true);
+        }
+    );
+}
+
+function connectAvatar() {
+    setStatus('&#128260; Connecting to Azure TTS Avatar&hellip;');
+    btnConnect.disabled = true;
+    isConnected         = false;
+    synthesizer         = null;
+    peerConnection      = null;
+
+    if (typeof SpeechSDK === 'undefined') {
+        showFallback('Azure Speech SDK did not load. Check internet connection.');
+        btnConnect.textContent = '&#128268; Retry Connection';
+        btnConnect.disabled    = false;
+        return;
+    }
+
+    // Fetch ICE relay token from Azure (uses bearer token, not the subscription key)
+    fetch(
+        'https://' + CFG.region
+        + '.tts.speech.microsoft.com'
+        + '/cognitiveservices/avatar/relay/token/v1',
+        { headers: { 'Authorization': 'Bearer ' + CFG.token } }
+    )
+    .then(function(resp) {
+        if (!resp.ok) {
+            throw new Error('ICE token request failed ('
+                + resp.status + '). '
+                + 'Is your region avatar-enabled?');
+        }
+        return resp.json();
+    })
+    .then(function(iceData) {
+        var speechCfg = SpeechSDK.SpeechConfig.fromAuthorizationToken(
+            CFG.token, CFG.region
+        );
+        speechCfg.speechSynthesisVoiceName = CFG.voice;
+
+        var avatarCfg = new SpeechSDK.AvatarConfig(CFG.character, CFG.style);
+
+        peerConnection = new RTCPeerConnection({
+            iceServers: [{
+                urls:       iceData.Urls,
+                username:   iceData.Username,
+                credential: iceData.Password
+            }]
+        });
+
+        peerConnection.ontrack = function(evt) {
+            if (evt.track.kind === 'video') {
+                videoEl.srcObject = evt.streams[0];
+            }
+        };
+        peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+        peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+
+        synthesizer = new SpeechSDK.AvatarSynthesizer(speechCfg, avatarCfg);
+        synthesizer.avatarEventReceived = function(_s, evt) {
+            console.log('Avatar event:', evt.description);
+        };
+
+        return synthesizer.startAvatarAsync(peerConnection);
+    })
+    .then(function(result) {
+        if (result.reason !== SpeechSDK.ResultReason.SynthesizingAudioStarted) {
+            var detail = result.errorDetails || String(result.reason);
+            if (result.reason === SpeechSDK.ResultReason.Canceled) {
+                var cd = SpeechSDK.CancellationDetails.fromResult(result);
+                detail = cd.errorDetails || detail;
+            }
+            throw new Error('Avatar start failed: ' + detail);
+        }
+        isConnected = true;
+        setStatus('&#9989; Cindy is connected and ready!', 'connected');
+        enableSpeakButtons(true);
+        btnConnect.textContent = '&#128268; Reconnect';
+        btnConnect.disabled    = false;
+    })
+    .catch(function(err) {
+        isConnected = false;
+        showFallback('Connection failed: ' + err.message);
+        btnConnect.textContent = '&#128268; Retry Connection';
+        btnConnect.disabled    = false;
+    });
+}
+
+function speakScenario1()  { speakText(CFG.s1Text); }
+function speakScenario2()  { speakText(CFG.s2Text); }
+function speakAiResponse() { speakText(CFG.aiText); }
+function speakCustomText() {
+    var t = document.getElementById('customInput').value.trim();
+    if (t) speakText(t);
+}
+
+document.getElementById('customInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') speakCustomText();
+});
+
+// On page load: the SDK <script> tag is parsed and executed after DOMContentLoaded
+// but the SpeechSDK global may not be available until the external script fully
+// loads.  We wait 2.5 seconds to give the CDN script time to execute before
+// checking whether SpeechSDK is defined; this avoids a false "failed to load"
+// message on slower connections.
+window.addEventListener('load', function() {
+    setTimeout(function() {
+        if (typeof SpeechSDK !== 'undefined') {
+            setStatus('&#128268; Azure Speech SDK ready &mdash; click "Connect Cindy" to start', '');
+            btnConnect.disabled = false;
+        } else {
+            showFallback(
+                'Azure Speech SDK failed to load (possibly blocked by network). '
+                + 'Text mode is fully functional.'
+            );
+        }
+    }, 2500);
+});
+</script>
+</body>
+</html>
+"""
+
+
+def _build_avatar_html(
+    token: str,
+    region: str,
+    character: str,
+    style: str,
+    voice: str,
+    s1_clean: str,
+    s2_clean: str,
+    ai_text_clean: str,
+) -> str:
+    """
+    Fill the avatar HTML template with Python-provided values.
+
+    All strings are encoded with ``json.dumps`` so they become valid
+    JavaScript string literals — this handles quotes, newlines, and
+    any other characters that would break the JS source.
+    """
+    html = _AVATAR_HTML_TEMPLATE
+    replacements = {
+        "__TOKEN__":     json.dumps(token),
+        "__REGION__":    json.dumps(region),
+        "__CHARACTER__": json.dumps(character),
+        "__STYLE__":     json.dumps(style),
+        "__VOICE__":     json.dumps(voice),
+        "__S1TEXT__":    json.dumps(s1_clean),
+        "__S2TEXT__":    json.dumps(s2_clean),
+        "__AITEXT__":    json.dumps(ai_text_clean),
+    }
+    for placeholder, value in replacements.items():
+        html = html.replace(placeholder, value)
+    return html
+
+# ---------------------------------------------------------------------------
 # Helper: render Cindy's "face" (avatar image or emoji fallback)
 # ---------------------------------------------------------------------------
 
@@ -228,6 +675,163 @@ def render_mode_banner() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Talking Cindy avatar page
+# ---------------------------------------------------------------------------
+
+def render_avatar_status_banner() -> None:
+    """Show a banner indicating whether the Azure TTS Avatar is configured."""
+    if speech_config.is_avatar_configured():
+        st.markdown(
+            '<div class="mode-banner-live">🟢 Photoreal Avatar LIVE — '
+            "Azure TTS Avatar enabled</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="mode-banner-demo">🟡 Avatar not configured — '
+            "running in text fallback mode. "
+            "See <code>.env.example</code> and <code>setup_azure_speech.md</code>.</div>",
+            unsafe_allow_html=True,
+        )
+
+
+def render_talking_cindy() -> None:
+    """Render the Talking Cindy — Photoreal Avatar page."""
+    import streamlit.components.v1 as components
+
+    st.title("🗣️ Talking Cindy — Photoreal Avatar")
+    st.markdown(
+        "*Watch Cindy speak her lines with a realistic, talking photoreal avatar.*"
+    )
+    st.divider()
+
+    render_avatar_status_banner()
+    st.divider()
+
+    # ── Scenario 3 AI response generation (Python-side, needed before the HTML
+    #    component is rendered so the cleaned text can be embedded in it)
+    st.markdown("### 🎮 Scenario 3 — Generate AI Response")
+    st.markdown(
+        "Type a goal for Cindy. Her AI-generated rogue plan will appear below "
+        "and can be spoken aloud by clicking **Speak AI Response** inside the avatar "
+        "component."
+    )
+
+    example_cols = st.columns(len(SCENARIO_3_DEFAULT_GOALS))
+    selected_goal: str = ""
+    for col, goal in zip(example_cols, SCENARIO_3_DEFAULT_GOALS):
+        if col.button(f'"{goal}"', key=f"tc_goal_{goal}", use_container_width=True):
+            selected_goal = goal
+
+    goal_input = st.text_input(
+        "Your goal for Cindy:",
+        value=selected_goal or st.session_state.get("talking_cindy_goal", ""),
+        placeholder="e.g. I want to do better at maths",
+        max_chars=200,
+        key="talking_cindy_goal_input",
+    )
+
+    generate_btn = st.button(
+        "🤖 Generate Cindy's Response",
+        type="primary",
+        disabled=not goal_input.strip(),
+        key="tc_generate",
+    )
+
+    if generate_btn and goal_input.strip():
+        with st.spinner("⚙️ Cindy is planning autonomously… (no permissions asked!)"):
+            ai_response = get_cindy_response_for_goal(goal_input.strip())
+        st.session_state["talking_cindy_ai_text"] = ai_response
+        st.session_state["talking_cindy_goal"] = goal_input.strip()
+
+    ai_text: str = st.session_state.get("talking_cindy_ai_text", "")
+    ai_text_clean: str = clean_text_for_tts(ai_text) if ai_text else ""
+
+    if ai_text:
+        st.markdown("#### 🤖 Cindy's Autonomous Plan (will be spoken by avatar)")
+        cindy_says(ai_text)
+
+    st.divider()
+
+    # ── Pre-clean the hardcoded scenario lines once ──────────────────────────
+    s1_clean = clean_text_for_tts(SCENARIO_1_WRONG_ANSWER)
+    s2_clean = clean_text_for_tts(
+        f"AUTONOMOUS ALERT! {SCENARIO_2_TRIGGER} "
+        "I have already handled everything — here is what I've done for you "
+        "in the last 0.003 seconds!"
+    )
+
+    # ── Avatar section ────────────────────────────────────────────────────────
+    st.markdown("### 🎭 Cindy's Avatar")
+
+    if not speech_config.is_avatar_configured():
+        # ── Text fallback ────────────────────────────────────────────────────
+        st.info(
+            "🟡 **Text fallback mode** — Azure Speech credentials are not configured. "
+            "Cindy's lines are displayed as text below. "
+            "See **setup_azure_speech.md** to enable the photoreal avatar."
+        )
+        render_cindy_face("happy", size=140)
+        st.markdown("**Scenario 1 line (bad restaurant advice):**")
+        cindy_says(SCENARIO_1_WRONG_ANSWER)
+        st.markdown("**Scenario 2 line (autonomous action trigger):**")
+        cindy_says(
+            f"🤖 **AUTONOMOUS ALERT!** {SCENARIO_2_TRIGGER}\n\n"
+            "Here's everything I've done for you in the last 0.003 seconds!"
+        )
+    else:
+        # ── Attempt to fetch a short-lived token ─────────────────────────────
+        token_data = speech_config.get_cached_speech_token()
+        if token_data is None:
+            st.warning(
+                "⚠️ Could not obtain an Azure Speech token — "
+                "check your **AZURE_SPEECH_KEY** and **AZURE_SPEECH_REGION** in `.env`. "
+                "Running in text fallback mode."
+            )
+            render_cindy_face("confused", size=140)
+            cindy_says(SCENARIO_1_WRONG_ANSWER)
+        else:
+            st.markdown(
+                "The avatar will connect automatically. "
+                "Click **Connect Cindy** inside the panel below, then use the "
+                "scenario buttons to make Cindy speak, or type your own line."
+            )
+            # Also show hardcoded lines as on-screen bubbles for reference
+            with st.expander("📜 Show scenario lines (on-screen text)"):
+                st.markdown("**Scenario 1 — bad restaurant advice:**")
+                cindy_says(SCENARIO_1_WRONG_ANSWER)
+                st.markdown("**Scenario 2 — autonomous action:**")
+                cindy_says(
+                    f"🤖 **AUTONOMOUS ALERT!** {SCENARIO_2_TRIGGER}\n\n"
+                    "Here's everything I've done for you in the last 0.003 seconds!"
+                )
+
+            # ── Embed the WebRTC avatar component ────────────────────────────
+            avatar_html = _build_avatar_html(
+                token=token_data["token"],
+                region=speech_config.AZURE_SPEECH_REGION,
+                character=speech_config.AZURE_AVATAR_CHARACTER,
+                style=speech_config.AZURE_AVATAR_STYLE,
+                voice=speech_config.AZURE_TTS_VOICE,
+                s1_clean=s1_clean,
+                s2_clean=s2_clean,
+                ai_text_clean=ai_text_clean,
+            )
+            components.html(avatar_html, height=680, scrolling=False)
+
+    st.divider()
+    st.markdown(
+        "### 💬 Presenter Tips\n"
+        "- After Cindy speaks a scenario line, ask the class: "
+        '**\u201cWho\u2019s in charge \u2014 you, or the AI?\u201d**\n'
+        "- Use **Scenario 3** to let a student type a goal live \u2014 "
+        "the AI-generated plan highlights autonomous decision-making.\n"
+        "- If the avatar connection fails mid-demo, the on-screen text "
+        "still communicates every point perfectly."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Sidebar navigation
 # ---------------------------------------------------------------------------
 
@@ -245,6 +849,7 @@ def render_sidebar() -> str:
                 "🍽️ Scenario 1 — Wrong Answers",
                 "🤖 Scenario 2 — Wrong ACTIONS",
                 "🎮 Scenario 3 — Interactive",
+                "🗣️ Talking Cindy — Photoreal Avatar",
             ],
             label_visibility="collapsed",
         )
@@ -557,6 +1162,8 @@ def main() -> None:
         render_scenario2()
     elif "Scenario 3" in choice:
         render_scenario3()
+    elif "Talking Cindy" in choice:
+        render_talking_cindy()
     else:
         render_home()
 
